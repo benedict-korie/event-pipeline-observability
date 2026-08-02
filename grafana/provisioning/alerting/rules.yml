@@ -1,0 +1,45 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: event-pipeline-alerts
+    folder: Event Pipeline
+    interval: 1m
+    rules:
+      - uid: high-failure-rate
+        title: High event failure rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(events_failed_total[5m]) / clamp_min(rate(events_received_total[5m]), 1e-9)
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.05]
+              refId: C
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event failure rate is above 5% for 5 minutes"
+          description: "Failure rate has been above 5% for at least 5 minutes. Check recent deploys and the processor's error logs."
