@@ -43,3 +43,140 @@ groups:
         annotations:
           summary: "Event failure rate is above 5% for 5 minutes"
           description: "Failure rate has been above 5% for at least 5 minutes. Check recent deploys and the processor's error logs."
+      - uid: slo-burn-rate-fast
+        title: SLO fast burn (page)
+        condition: G
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(events_failed_total[5m]) / clamp_min(rate(events_received_total[5m]), 1e-9) / 0.10
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(events_failed_total[1h]) / clamp_min(rate(events_received_total[1h]), 1e-9) / 0.10
+              refId: C
+          - refId: D
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: C
+              reducer: last
+              refId: D
+          - refId: E
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [8]
+              refId: E
+          - refId: F
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: D
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [8]
+              refId: F
+          - refId: G
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$E && $F"
+              refId: G
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO error budget burning fast (8x sustainable rate)"
+          description: "5m and 1h burn rate both above 8x. At this rate the 30-day error budget exhausts in ~3.75 days. Page immediately."
+
+      - uid: slo-burn-rate-slow
+        title: SLO slow burn (ticket)
+        condition: G
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(events_failed_total[1h]) / clamp_min(rate(events_received_total[1h]), 1e-9) / 0.10
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(events_failed_total[6h]) / clamp_min(rate(events_received_total[6h]), 1e-9) / 0.10
+              refId: C
+          - refId: D
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: C
+              reducer: last
+              refId: D
+          - refId: E
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [3]
+              refId: E
+          - refId: F
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: D
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [3]
+              refId: F
+          - refId: G
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$E && $F"
+              refId: G
+        noDataState: NoData
+        execErrState: Error
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLO error budget burning slow (3x sustainable rate)"
+          description: "1h and 6h burn rate both above 3x. At this rate the 30-day error budget exhausts in ~10 days. Open a ticket."
