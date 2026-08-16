@@ -9,6 +9,8 @@ package processor
 import (
 	"errors"
 	"math/rand"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -19,21 +21,33 @@ type Job struct {
 	Payload string `json:"payload"`
 }
 
+// failureRate is the probability (0.0-1.0) that a job fails. Defaults to
+// the baseline ~4% used throughout this project's alerting and SLO
+// reasoning. Overridable via FAILURE_RATE_OVERRIDE so burn-rate alerts
+// can be triggered on demand for verification, without a permanent
+// chaos-engineering setup this project doesn't need. See DECISIONS.md.
+var failureRate = 0.04
+
+func init() {
+	if v := os.Getenv("FAILURE_RATE_OVERRIDE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			failureRate = f
+		}
+	}
+}
+
 // Process simulates doing work on a job. Most jobs finish quickly; a
 // small fraction take much longer (the "slow tail" the histogram buckets
 // are shaped around) and a small fraction fail outright.
 func Process(job Job) (time.Duration, error) {
 	start := time.Now()
-
 	base := time.Duration(20+rand.Intn(60)) * time.Millisecond
 	if rand.Intn(20) == 0 { // ~5% of jobs hit a slow path
 		base += time.Duration(500+rand.Intn(1500)) * time.Millisecond
 	}
 	time.Sleep(base)
-
 	elapsed := time.Since(start)
-
-	if rand.Intn(25) == 0 { // ~4% failure rate
+	if rand.Float64() < failureRate {
 		return elapsed, ErrProcessingFailed
 	}
 	return elapsed, nil
