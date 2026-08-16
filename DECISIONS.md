@@ -69,3 +69,29 @@ real margin above normal noise. All failures currently count against the
 SLO because the system does not model more than one failure type yet -
 that is a known limitation, not a workaround. Revisit the metric split
 and SLO target if a real validation path gets added later.
+
+## Burn-rate alert thresholds
+
+Initial fast-burn threshold was 14.4x, slow-burn was 6x - standard values
+from common SRE reference material for a 99.9% SLO (0.1% error budget).
+Copied without checking they fit this project's SLO.
+
+Bug: with a 90% SLO (10% error budget), maximum possible burn rate is
+capped at 10 (100% failure / 10% budget = 10). A threshold of 14.4 can
+never be reached, no matter how badly the service fails - the alert was
+unfireable by construction. Caught this by checking the actual burn-rate
+value in Prometheus during testing (see below) rather than trusting the
+copied numbers.
+
+Fixed: fast-burn threshold lowered to 8 (reachable at ~80%+ sustained
+failure, budget exhausts in ~3.75 days), slow-burn to 3 (reachable at
+~30%+ sustained failure, budget exhausts in ~10 days). Both scaled to
+this SLO's actual error budget rather than copied from a different one.
+
+Verified with FAILURE_RATE_OVERRIDE=0.6 (see processor.go) and sustained
+traffic: burn rate settled at ~6.06, correctly sitting between the two
+thresholds. Result: high-failure-rate alert fired (unrelated pre-existing
+alert, unaffected), slo-burn-rate-slow went Pending (6.06 > 3, correct),
+slo-burn-rate-fast stayed Normal (6.06 < 8, correct) - confirming the two
+tiers are properly differentiated rather than just copies of each other
+with different numbers.
